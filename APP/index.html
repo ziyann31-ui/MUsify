@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Musify</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎵</text></svg>">
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="theme-dark">
+    
+    <div id="app-container">
+        <!-- Main Content Area -->
+        <main id="main-content">
+            <!-- Views will be dynamically injected here -->
+        </main>
+        
+        <!-- Persistent Mini Player -->
+        <div id="mini-player" class="hidden">
+            <div class="mp-progress-bar">
+                <div class="mp-progress-fill" id="mp-progress"></div>
+            </div>
+            <div class="mp-content" onclick="app.ui.toggleFullScreenPlayer()">
+                <div class="mp-info">
+                    <img id="mp-artwork" src="" alt="Album Art">
+                    <div class="mp-text">
+                        <div id="mp-title" class="truncate">No Track Selected</div>
+                        <div id="mp-artist" class="truncate">Unknown Artist</div>
+                    </div>
+                </div>
+                <div class="mp-controls" onclick="event.stopPropagation()">
+                    <button id="mp-play-btn" class="icon-btn"><i data-lucide="play"></i></button>
+                    <button id="mp-next-btn" class="icon-btn"><i data-lucide="skip-forward"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Navigation -->
+        <nav id="bottom-nav">
+            <button class="nav-item active" data-view="home">
+                <i data-lucide="home"></i>
+                <span>Home</span>
+            </button>
+            <button class="nav-item" data-view="library">
+                <i data-lucide="library"></i>
+                <span>Library</span>
+            </button>
+            <button class="nav-item" data-view="import">
+                <i data-lucide="download"></i>
+                <span>Import</span>
+            </button>
+            <button class="nav-item" data-view="search">
+                <i data-lucide="search"></i>
+                <span>Search</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Full Screen Player Overlay -->
+    <div id="full-player" class="overlay hidden">
+        <div class="fp-header">
+            <button class="icon-btn" onclick="app.ui.toggleFullScreenPlayer()"><i data-lucide="chevron-down"></i></button>
+            <span>Now Playing</span>
+            <button class="icon-btn"><i data-lucide="more-vertical"></i></button>
+        </div>
+        <div class="fp-artwork-container">
+            <img id="fp-artwork" src="" alt="Album Art">
+        </div>
+        <div class="fp-info">
+            <div class="fp-text">
+                <h2 id="fp-title" class="truncate">No Track Selected</h2>
+                <p id="fp-artist" class="truncate">Unknown Artist</p>
+            </div>
+            <button class="icon-btn"><i data-lucide="heart"></i></button>
+        </div>
+        <div class="fp-progress">
+            <input type="range" id="fp-seek-slider" min="0" max="100" value="0">
+            <div class="fp-time">
+                <span id="fp-current-time">0:00</span>
+                <span id="fp-duration">0:00</span>
+            </div>
+        </div>
+        <div class="fp-controls">
+            <button class="icon-btn"><i data-lucide="shuffle"></i></button>
+            <button class="icon-btn"><i data-lucide="skip-back"></i></button>
+            <button class="play-btn-large" id="fp-play-btn"><i data-lucide="play" size="32"></i></button>
+            <button class="icon-btn"><i data-lucide="skip-forward"></i></button>
+            <button class="icon-btn"><i data-lucide="repeat"></i></button>
+        </div>
+    </div>
+
+    <!-- Templates for Views -->
+    <template id="tpl-home">
+        <div class="view-header">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <img src="logo.png" alt="Musify Logo" style="height: 32px;" onerror="this.style.display='none'">
+                <h1>Musify</h1>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+                <div id="user-avatar-btn" class="user-avatar-btn" onclick="app.ui.switchView('settings')" title="Account & Settings">
+                    <img id="user-avatar-img" src="" alt="" onerror="this.style.display='none'">
+                    <i data-lucide="user" id="user-avatar-icon"></i>
+                </div>
+                <button class="icon-btn" onclick="window.authManager.signOut()" title="Sign Out"><i data-lucide="log-out"></i></button>
+            </div>
+        </div>
+        <div class="view-content scrollable">
+            <section class="home-section">
+                <h2>Recently Played</h2>
+                <div class="horizontal-scroll" id="home-recent">
+                    <!-- Insert cards -->
+                </div>
+            </section>
+            <section class="home-section">
+                <h2>Recommended</h2>
+                <div class="grid-layout" id="home-recommended">
+                    <!-- Insert grid items -->
+                </div>
+            </section>
+        </div>
+    </template>
+
+    <template id="tpl-library">
+        <div class="view-header">
+            <h1>Library</h1>
+        </div>
+        <div class="view-content scrollable">
+            <div class="library-tabs">
+                <button class="tab active" data-tab="songs">Songs</button>
+                <button class="tab" data-tab="playlists">Playlists</button>
+                <button class="tab" data-tab="downloads">Downloads</button>
+            </div>
+            <div id="library-content" class="list-layout">
+                <!-- Insert list items -->
+            </div>
+        </div>
+    </template>
+
+    <template id="tpl-import">
+        <div class="view-header">
+            <h1>Import</h1>
+        </div>
+        <div class="view-content scrollable">
+            <div class="import-container">
+
+                <p class="import-desc">
+                    Paste a Spotify playlist share link. Musify will detect every track
+                    and let you save audio from legally permitted sources for offline playback.
+                </p>
+
+                <div class="import-input-row">
+                    <input
+                        type="url"
+                        id="import-url"
+                        class="text-input"
+                        placeholder="https://open.spotify.com/playlist/..."
+                        autocomplete="off" autocorrect="off" spellcheck="false"
+                    >
+                    <button class="primary-btn detect-btn" id="btn-detect">Detect Songs</button>
+                </div>
+
+                <!-- Error Banner -->
+                <div id="import-error" class="import-error-banner hidden"></div>
+
+                <!-- Results Section -->
+                <div id="import-results" class="hidden">
+
+                    <!-- Playlist Header -->
+                    <div class="playlist-header">
+                        <div class="playlist-cover-wrap">
+                            <img id="pl-cover" src="" alt="Playlist Cover">
+                        </div>
+                        <div class="playlist-meta">
+                            <h2 id="pl-title">Playlist</h2>
+                            <p id="pl-meta" class="pl-meta-text"></p>
+                            <div class="pl-badges">
+                                <span class="pl-badge" id="detected-count"></span>
+                                <span class="pl-badge sel-count" id="pl-selected-count"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Bar -->
+                    <div class="import-actions">
+                        <label class="checkbox-label" title="Select / deselect all available tracks">
+                            <input type="checkbox" id="import-select-all" checked>
+                            <span>Select All</span>
+                        </label>
+                        <div class="import-action-btns">
+                            <button class="secondary-btn" id="btn-download-selected" disabled>Download Selected</button>
+                            <button class="primary-btn action-btn" id="btn-download-all">Download All</button>
+                        </div>
+                    </div>
+
+                    <!-- Overall Progress -->
+                    <div id="overall-progress-container" class="overall-progress hidden">
+                        <div class="overall-progress-header">
+                            <span>Downloading…</span>
+                            <span>
+                                <strong id="overall-progress-text">0%</strong>
+                                <span id="overall-progress-detail" style="margin-left:6px;color:var(--text-secondary)"></span>
+                            </span>
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill" id="overall-progress-fill" style="width:0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Track List -->
+                    <div id="import-track-list">
+                        <!-- Track rows injected by ui.js -->
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </template>
+    
+    <template id="tpl-search">
+        <div class="view-header search-header">
+            <div class="search-input-wrapper">
+                <i data-lucide="search"></i>
+                <input type="text" id="search-input" class="text-input" placeholder="Search library...">
+            </div>
+        </div>
+        <div class="view-content scrollable">
+            <div id="search-results" class="list-layout">
+                <div class="empty-state">Search your local library</div>
+            </div>
+        </div>
+    </template>
+
+    <template id="tpl-settings">
+        <div class="view-header">
+            <button class="icon-btn" onclick="app.ui.switchView('home')"><i data-lucide="arrow-left"></i></button>
+            <h1>Settings</h1>
+        </div>
+        <div class="view-content scrollable">
+            <div style="padding: 20px;">
+                <!-- User Info -->
+                <div id="settings-user-card" class="settings-user-card"></div>
+
+                <h2 style="margin-bottom:15px; font-size:18px;">Storage</h2>
+                <div style="margin-bottom: 20px;">
+                    <label style="display:block; margin-bottom:8px; color:var(--text-secondary);">Download Folder</label>
+                    <input type="text" id="settings-download-folder" class="text-input" placeholder="e.g. downloads" style="width:100%;">
+                </div>
+                <button class="primary-btn" id="btn-save-settings">Save Settings</button>
+                <div id="settings-status" style="margin-top:15px; color:var(--accent-color); font-weight:500;"></div>
+
+                <div style="margin-top:32px; border-top:1px solid var(--border-color); padding-top:24px;">
+                    <button class="secondary-btn" style="width:100%; color:#f87171;" onclick="window.authManager.signOut()">Sign Out</button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Auth Screen Template -->
+    <template id="tpl-auth">
+        <div class="auth-screen">
+            <div class="auth-card">
+                <!-- Logo -->
+                <div class="auth-logo">
+                    <div class="auth-logo-icon">🎵</div>
+                    <h1 class="auth-title">Musify</h1>
+                    <p class="auth-subtitle">Your music, your way</p>
+                </div>
+
+                <!-- Google Sign-In -->
+                <button class="google-btn" id="btn-google-signin">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="height:18px;vertical-align:middle;margin-right:10px" alt="Google">
+                    Continue with Google
+                </button>
+
+                <div class="auth-divider"><span>or</span></div>
+
+                <!-- Name (only shown when creating account) -->
+                <div id="auth-name-row" class="hidden">
+                    <input type="text" id="auth-name" class="text-input" placeholder="Your name" autocomplete="name">
+                </div>
+
+                <!-- Email + Password -->
+                <input type="email" id="auth-email" class="text-input" placeholder="Email address" autocomplete="email">
+                <input type="password" id="auth-password" class="text-input" placeholder="Password" autocomplete="current-password">
+
+                <!-- Error Message -->
+                <div id="auth-error" class="auth-error hidden"></div>
+
+                <!-- Login buttons -->
+                <div id="auth-login-group">
+                    <button class="primary-btn" id="btn-email-login" style="width:100%;">Sign In</button>
+                    <button class="auth-link-btn" id="btn-reset-password">Forgot password?</button>
+                </div>
+
+                <!-- Create account buttons -->
+                <div id="auth-create-group" class="hidden">
+                    <button class="primary-btn" id="btn-create-account" style="width:100%;">Create Account</button>
+                </div>
+
+                <!-- Toggle -->
+                <p class="auth-toggle">
+                    <span id="auth-toggle-text">Don't have an account?</span>
+                    <a href="#" id="auth-toggle-link">Create one</a>
+                </p>
+            </div>
+        </div>
+    </template>
+
+    <!-- Application Scripts -->
+    <script src="js/store.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/db.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/player.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

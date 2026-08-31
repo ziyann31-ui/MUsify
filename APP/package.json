@@ -1,0 +1,9 @@
+{
+    "name": "musify",
+    "version": "1.0.0",
+    "description": "Musify — Spotify Playlist Downloader",
+    "private": true,
+    "engines": {
+        "node": "18.x"
+    }
+}
